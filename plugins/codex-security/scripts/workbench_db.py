@@ -785,10 +785,7 @@ def save_workspace(connection: sqlite3.Connection, args: argparse.Namespace) -> 
                 scope,
                 args.mode,
                 user_context_argument(args),
-                diff_target["kind"] if diff_target else None,
-                diff_target["baseRevision"] if diff_target else None,
-                diff_target["headRevision"] if diff_target else None,
-                diff_target.get("contentDigest") if diff_target else None,
+                *scan_diff_identity(diff_target or None),
                 timestamp,
                 workspace["id"],
             ),
@@ -2082,12 +2079,7 @@ def request_finding_remediation_action(
         occurrence = require_occurrence(connection, args.occurrence_id)
         require_finding_open(connection, occurrence["id"])
         scan = require_scan(connection, occurrence["scan_id"])
-        current = connection.execute(
-            "SELECT * FROM finding_remediation_attempts WHERE request_id = ?",
-            (request_id,),
-        ).fetchone()
-        if current is None or current["occurrence_id"] != occurrence["id"]:
-            raise SystemExit("Codex Security finding remediation request not found.")
+        current = remediation_state.require_request(connection, request_id, occurrence)
         if current["pending_action"] is not None:
             if (
                 current["pending_action"] == args.action
@@ -2155,12 +2147,7 @@ def claim_finding_remediation_resend(
         timestamp = now()
         occurrence = require_occurrence(connection, args.occurrence_id)
         require_finding_open(connection, occurrence["id"])
-        current = connection.execute(
-            "SELECT * FROM finding_remediation_attempts WHERE request_id = ?",
-            (request_id,),
-        ).fetchone()
-        if current is None or current["occurrence_id"] != occurrence["id"]:
-            raise SystemExit("Codex Security finding remediation request not found.")
+        current = remediation_state.require_request(connection, request_id, occurrence)
         if current["pending_action"] is None:
             raise SystemExit("This remediation attempt does not have a pending host request.")
         if current["pending_action_claim_token"] == action_token:
@@ -2170,7 +2157,6 @@ def claim_finding_remediation_resend(
             return result
         delivered_at = current["pending_action_delivered_at"]
         if delivered_at is not None:
-            claimed_token = action_token
             updated = connection.execute(
                 """
                 UPDATE finding_remediation_attempts
@@ -2193,7 +2179,6 @@ def claim_finding_remediation_resend(
                 "This remediation worker is still within its execution lease. Retry later."
             )
         else:
-            claimed_token = action_token
             updated = connection.execute(
                 """
                 UPDATE finding_remediation_attempts
@@ -2219,7 +2204,7 @@ def claim_finding_remediation_resend(
         if updated.rowcount != 1:
             raise SystemExit(unavailable)
     result = scan_context(connection, occurrence["scan_id"])
-    result["actionToken"] = claimed_token
+    result["actionToken"] = action_token
     return result
 
 
@@ -2279,12 +2264,7 @@ def set_finding_remediation(
         occurrence = require_occurrence(connection, args.occurrence_id)
         require_finding_open(connection, occurrence["id"])
         scan = require_scan(connection, occurrence["scan_id"])
-        current = connection.execute(
-            "SELECT * FROM finding_remediation_attempts WHERE request_id = ?",
-            (request_id,),
-        ).fetchone()
-        if current is None or current["occurrence_id"] != occurrence["id"]:
-            raise SystemExit("Codex Security finding remediation request not found.")
+        current = remediation_state.require_request(connection, request_id, occurrence)
         if current["version"] != args.expected_version:
             raise SystemExit(
                 "This remediation request changed. Refresh it before recording an update."
@@ -2778,13 +2758,10 @@ def scan_result(
         "status": "canceled" if scan["canceled_at"] else scan["status"],
         "updatedAt": progress["updated_at"],
     }
+    review_updated_at = ""
     if independent_reviews is not None:
-        progress_result["independentReviews"] = {
-            "active": independent_reviews["active"],
-            "completed": independent_reviews["completed"],
-            "maximum": independent_reviews["maximum"],
-            "consolidating": independent_reviews["consolidating"],
-        }
+        review_updated_at = str(independent_reviews.pop("updatedAt"))
+        progress_result["independentReviews"] = independent_reviews
     relations = scan_history.finding_relations(
         connection, scan["id"], (row["id"] for row in occurrence_rows)
     )
@@ -2829,7 +2806,7 @@ def scan_result(
         "updatedAt": max(
             scan["updated_at"],
             progress["updated_at"],
-            str(independent_reviews["updatedAt"]) if independent_reviews is not None else "",
+            review_updated_at,
             finding_management_updated_at(connection, scan["id"]) or "",
         ),
         "userContext": scan["user_context"],
@@ -3133,8 +3110,7 @@ def finding_remediation_result(
     row = connection.execute(
         """
         SELECT remediation.request_id, remediation.state, remediation.version,
-            remediation.base_revision, remediation.base_content_digest,
-            remediation.applied_content_digest, remediation.pending_action,
+            remediation.base_revision, remediation.pending_action,
             remediation.pending_action_claimed_at, remediation.pending_action_claim_token,
             remediation.pending_action_delivered_at,
             remediation.patch_path, remediation.patch_digest, remediation.summary,
