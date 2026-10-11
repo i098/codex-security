@@ -1221,6 +1221,7 @@ env_key = "CODEX_API_KEY"
         `CAPTURE_SYNTHETIC_OPENAI_AUTH\n${virtualenv === undefined ? "" : "CAPTURE_SYNTHETIC_PYTHON\n"}`,
       );
       const executor = new CodexSdkWorkerExecutor({
+        model: "gpt-daybreak-blue-latest",
         parentSandbox: trustedParentSandbox,
       });
       for (const kind of ["discovery", "dedup"] as const) {
@@ -1243,6 +1244,11 @@ env_key = "CODEX_API_KEY"
             runtimeEnvironment.LD_LIBRARY_PATH,
           );
           assert.equal(invocation.codexHome, fixture.root);
+          assertFlagPair(
+            invocation.argv,
+            "--model",
+            "gpt-daybreak-blue-latest",
+          );
           assert.deepEqual(invocation.runtimeEnvironment, runtimeEnvironment);
           if (virtualenv !== undefined) {
             assert.equal(invocation.pythonPrefix, virtualenv);
@@ -1254,6 +1260,7 @@ env_key = "CODEX_API_KEY"
           for (const [name, value] of Object.entries(runtimeEnvironment)) {
             assert.equal(process.env[name], value);
           }
+
           assert.equal(
             invocation.openaiAuthentication.CODEX_API_KEY,
             entry.expected,
