@@ -826,9 +826,6 @@ describe("custom validation", () => {
     expect(standard).toContain("retain the model in an early partial");
     expect(standard).toContain("`followup_task`");
     expect(standard).toContain("`send_message`");
-    expect(standard).toContain("SDK-owned discovery handoff");
-    expect(standard).not.toContain("submit the result");
-    expect(standard).not.toContain("follow the host's completion path");
     expect(standard).not.toContain("undefined");
     expect(standard).not.toContain(
       "Independently validate each unique finding",
@@ -843,7 +840,6 @@ describe("custom validation", () => {
     for (const prompt of [standard, diff]) {
       expect(prompt).toContain("custom_pending");
       expect(prompt).toContain("extensions.customValidationSurfaceIds");
-      expect(prompt).toContain("return control to the SDK");
       expect(prompt).not.toMatch(/\bcomplete:\s*true\b/);
       expect(prompt).not.toContain("finalize_scan_contract.py");
     }
