@@ -441,6 +441,11 @@ def requested_scan_paths(scan: sqlite3.Row) -> list[str]:
     return [scan["scope"]]
 
 
+def requested_finding_scope(scan: sqlite3.Row) -> list[tuple[str, bool]]:
+    target = Path(scan["target_path"])
+    return [(path, (target / path).is_file()) for path in requested_scan_paths(scan)]
+
+
 def scan_contract(scan: sqlite3.Row) -> dict[str, Any]:
     target = Path(scan["target_path"])
     target_contract = {
@@ -1542,7 +1547,7 @@ def complete_scan_locked(
                 completion_binding=completion_binding,
                 completion_warnings=warnings if scan["mode"] != "deep" else None,
                 draft_documents=draft_documents,
-                finding_scope=requested_scan_paths(scan) if scan["mode"] == "deep" else None,
+                finding_scope=requested_finding_scope(scan) if scan["mode"] == "deep" else None,
             )
         add_warning()
         wrote = True

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { finding } from "./scan-draft-fixture.ts";
@@ -18,14 +18,32 @@ for (const resumed of [false, true]) {
     [
       "multi-path",
       { scope: ".", includePaths: ["api", "background jobs"] },
-      ["api", "jobs"],
+      ["api", "jobs", "file-descendant"],
     ],
-    ["single-path", { scope: "api" }, ["api"]],
-    ["repository", { scope: "." }, ["api", "jobs", "unrelated", "prefix"]],
+    ["single-path", { scope: "api" }, ["api", "file-descendant"]],
+    [
+      "normalized-paths",
+      { includePaths: ["./api/", "background jobs/."] },
+      ["api", "jobs", "file-descendant"],
+    ],
+    ["file-path", { includePaths: ["./api/source.py"] }, ["api"]],
+    [
+      "repository",
+      { scope: "." },
+      ["api", "jobs", "unrelated", "prefix", "file-descendant"],
+    ],
   ] as const) {
     test(`${label} worker filters reconciled findings with resumed=${resumed}`, async (t) => {
       const f = await fixture(t, "worker");
-      const input = { ...f.draft({}, true), findings };
+      await mkdir(join(f.root, "api"));
+      await writeFile(join(f.root, "api/source.py"), "# scoped file\n");
+      const input = {
+        ...f.draft({}, true),
+        findings: [
+          ...findings,
+          finding("file-descendant", "api/source.py/generated"),
+        ],
+      };
       let checkpoints: [string, Buffer][] = [];
       if (resumed) {
         await f.write(input);
@@ -40,7 +58,7 @@ for (const resumed of [false, true]) {
         );
       }
       Object.assign(f.context, binding);
-      await f.write({ ...input, findings: resumed ? [] : findings });
+      await f.write({ ...input, findings: resumed ? [] : input.findings });
       const result = await readJson(f.root, "result.json");
       assert.deepEqual(
         result.findings.map(
@@ -152,3 +170,26 @@ test("worker scope keeps a finding with any matching location and supports exact
   );
   assert.deepEqual(result.findings.at(-1).locations, mixed.locations);
 });
+
+for (const scope of ["./api/", "api/source.py"]) {
+  test(`Deep parent publication respects ${scope}`, async (t) => {
+    const f = await fixture(t, "deep");
+    await mkdir(join(f.root, "api"));
+    await writeFile(join(f.root, "api/source.py"), "# scoped file\n");
+    f.context.targetContract = {
+      ...f.context.targetContract,
+      scope: { requiredIncludePaths: [scope], requiredExcludePaths: [] },
+    };
+    await f.write({
+      ...f.draft({}, true),
+      findings: [findings[0], finding("descendant", "api/source.py/generated")],
+    });
+    const result = await readJson(f.root, "findings.json");
+    assert.deepEqual(
+      result.findings.map(
+        (row: { identity: { anchor: string } }) => row.identity.anchor,
+      ),
+      scope === "./api/" ? ["api", "descendant"] : ["api"],
+    );
+  });
+}

@@ -37,8 +37,9 @@ def publication_scan(workbench_api, workbench_db, tmp_path, monkeypatch):
         (target / "subdir" / "extract.py").write_text("# Synthetic scan target\n")
         if paths is not None:
             for directory in [*paths, "unrelated"]:
-                (target / directory).mkdir(exist_ok=True)
-                (target / directory / "extract.py").write_text("# Synthetic scoped target\n")
+                if not (target / directory).is_file():
+                    (target / directory).mkdir(exist_ok=True)
+                    (target / directory / "extract.py").write_text("# Synthetic scoped target\n")
         include_paths = paths if paths is not None else [scope]
         scan_dir = tmp_path / "scan"
         scan_dir.mkdir(mode=0o700)
@@ -542,12 +543,15 @@ def test_standard_publication_preserves_deliberately_partial_coverage(
 
 
 @pytest.mark.parametrize("resumed", [False, True])
+@pytest.mark.parametrize("scope", ["subdir", "./subdir/", "subdir/extract.py"])
 def test_scoped_deep_completion_filters_old_parent_and_preserves_accepted_sources(
-    workbench_api, workbench_db, publication_scan, resumed
+    workbench_api, workbench_db, publication_scan, resumed, scope
 ):
-    scan = publication_scan(paths=["subdir", "background jobs"])
+    scan = publication_scan(paths=[scope, "background jobs"])
     findings = []
-    for index, directory in enumerate(["subdir", "background jobs", "unrelated"]):
+    for index, directory in enumerate(
+        ["subdir", "background jobs", "unrelated", "subdir/extract.py"]
+    ):
         finding = copy.deepcopy(scan.findings[0])
         finding["identity"]["anchor"] = f"scope-{index}"
         finding["title"] = f"Scope finding {directory}"
@@ -574,7 +578,9 @@ def test_scoped_deep_completion_filters_old_parent_and_preserves_accepted_source
         row["locations"][0]["path"]
         for row in json.loads((scan.scan_dir / "findings.json").read_text())["findings"]
     ]
-    assert paths == ["subdir/extract.py", "background jobs/extract.py"]
+    assert paths == ["subdir/extract.py", "background jobs/extract.py"] + (
+        [] if scope == "subdir/extract.py" else ["subdir/extract.py/extract.py"]
+    )
     assert "Scope finding unrelated" not in (scan.scan_dir / "report.md").read_text()
     indexed = workbench_db.execute(
         "SELECT details_json FROM findings",
@@ -620,11 +626,18 @@ def test_deep_scope_filter_does_not_hide_unsafe_finding_locations(
     assert manifest["scan"].get("status") != "completed"
 
 
+@pytest.mark.parametrize(
+    "scope, location",
+    [
+        ("subdir", "unrelated/extract.py"),
+        ("./subdir/extract.py", "subdir/extract.py/generated"),
+    ],
+)
 def test_stopped_deep_projection_filters_the_canonical_parent(
-    workbench_api, workbench_db, publication_scan
+    workbench_api, workbench_db, publication_scan, scope, location
 ):
-    scan = publication_scan(paths=["subdir", "background jobs"])
-    scan.findings[0]["locations"] = [{"path": "unrelated/extract.py", "startLine": 1}]
+    scan = publication_scan(paths=[scope, "background jobs"])
+    scan.findings[0]["locations"] = [{"path": location, "startLine": 1}]
     (scan.scan_dir / "findings.json").write_text(json.dumps({"findings": scan.findings}))
     stopped = workbench_api["saved_results"].fail_scan(
         workbench_api["_WORKBENCH_DB_CONTEXT"],

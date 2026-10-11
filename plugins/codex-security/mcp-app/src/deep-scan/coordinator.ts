@@ -312,6 +312,7 @@ export class DeepScanCoordinator {
       draft.findings = findingsWithinScope(
         draft.findings,
         this.state.includePaths ?? [this.state.scope],
+        this.state.targetPath,
       );
       await this.options.onComplete?.(
         draft,
