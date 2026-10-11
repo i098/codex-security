@@ -69,7 +69,7 @@ const semanticFindingGuidance =
   " Findings require severity:{level}, confidence:{level,rationale}, taxonomy:{category,cwe:[]}, locations:[{path,startLine,endLine?}], and provenance:{source}, alongside ruleId,title,summary,remediation. Use repository-relative paths. Each codeEvidence entry needs id,label,path,startLine,code,explanation. Omit host-owned findingId,occurrenceId,fingerprints and scope.includePaths/excludePaths.";
 
 const semanticCoverageGuidance =
-  ' Coverage shape: {completeness:"partial"|"complete"|"unknown",surfaces:[{label,disposition}],explicitExclusions:[{pattern,reason}],deferred:[{id?,reason}]}. Surface dispositions: reported,no_issue_found,rejected,not_applicable,needs_follow_up. Arrays may be empty. Omit host-owned coverage documentType,schemaVersion,scanId,mode,inventoryStrategy,includePaths,excludePaths,receiptRefs. Omit resolvedDeferred from complete:false checkpoints; on a terminal draft use it only for finished generic tasks, and resolve candidates with their finding or rejected surface.';
+  ' Coverage shape: {completeness:"partial"|"complete"|"unknown",surfaces:[{label,disposition}],explicitExclusions:[{pattern,reason}],deferred:[{id?,reason}]}. Surface dispositions: reported,no_issue_found,rejected,not_applicable,needs_follow_up. Arrays may be empty. Omit host-owned coverage documentType,schemaVersion,scanId,mode,inventoryStrategy,includePaths,excludePaths,receiptRefs. Omit resolvedDeferred from complete:false checkpoints; on a terminal draft use it only for finished generic tasks, and resolve candidates with their finding or a rejected/not_applicable surface carrying candidateId.';
 
 function signalFromRequestContext(
   requestContext: unknown,
