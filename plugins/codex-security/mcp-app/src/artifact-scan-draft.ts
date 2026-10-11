@@ -1,7 +1,7 @@
 import type { JsonObject } from "./types.js";
 import { isRecord as isObject, isNonEmptyString } from "./record.js";
 import { createHash, randomUUID } from "node:crypto";
-import { promises as fs, statSync } from "node:fs";
+import { promises as fs } from "node:fs";
 import { dirname, join, posix, sep } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import type * as z from "zod/v4";
@@ -121,7 +121,7 @@ export async function recordCodexSecurityScanDraftViaWorkbench(
         ? findingsWithinScope(
             reconciled.findings,
             scope.includePaths as string[],
-            context.repoRoot,
+            trustedScope.filePaths as string[] | undefined,
           )
         : reconciled.findings;
     const findings = buildFindings(scopedFindings, context.mode);
@@ -237,7 +237,7 @@ export async function recordCodexSecurityWorkerScanDraft(
     findings: findingsWithinScope(
       parsed.findings,
       includePaths,
-      context.repoRoot,
+      context.filePaths,
     ),
   };
   scoped = (await preserveScanDraft(context, scoped)).input;
@@ -245,7 +245,7 @@ export async function recordCodexSecurityWorkerScanDraft(
   scoped.findings = findingsWithinScope(
     scoped.findings,
     includePaths,
-    context.repoRoot,
+    context.filePaths,
   );
   const destination = await artifactDestination(
     context,
@@ -273,17 +273,18 @@ export async function recordCodexSecurityWorkerScanDraft(
 export function findingsWithinScope(
   findings: JsonObject[],
   includePaths: readonly string[],
-  repoRoot: string,
+  filePaths: readonly string[] = [],
 ): JsonObject[] {
   const scopes = includePaths.map((scope) =>
     posix.normalize(scope).replace(/\/$/u, ""),
   );
   if (scopes.includes(".")) return findings;
+  const files = new Set(
+    filePaths.map((path) => posix.normalize(path).replace(/\/$/u, "")),
+  );
   const targets = scopes.map((scope) => ({
     path: scope,
-    isFile:
-      statSync(join(repoRoot, scope), { throwIfNoEntry: false })?.isFile() ??
-      false,
+    isFile: files.has(scope),
   }));
   return findings.filter((finding) =>
     (finding.locations as JsonObject[]).some((location) => {

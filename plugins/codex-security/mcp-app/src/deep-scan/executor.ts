@@ -64,6 +64,7 @@ export interface CodexSdkWorkerArtifactContext {
   scanId: string;
   scope?: string;
   includePaths?: readonly string[];
+  filePaths?: readonly string[];
   pythonCommand?: string;
 }
 
@@ -84,6 +85,10 @@ export class CodexSdkWorkerExecutor implements CodexWorkerExecutor {
 
   async run(request: CodexWorkerRequest): Promise<CodexWorkerResult> {
     const includePaths = this.modelSettings.artifactContext?.includePaths;
+    const scopeInput = JSON.stringify({
+      paths: includePaths,
+      filePaths: this.modelSettings.artifactContext?.filePaths ?? [],
+    });
     const includePathsFile =
       includePaths === undefined
         ? undefined
@@ -113,7 +118,7 @@ export class CodexSdkWorkerExecutor implements CodexWorkerExecutor {
       }
       if (includePathsFile !== undefined) {
         // Keep host-bound inputs beside the prompt, outside the worker's output root.
-        await writePrivateFile(includePathsFile, JSON.stringify(includePaths));
+        await writePrivateFile(includePathsFile, scopeInput);
       }
       // Keep one native configuration for the policy check and the worker turn.
       // Worker-owned tool and permission settings take precedence over inheritance.

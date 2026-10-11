@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import shutil
 import uuid
 from argparse import Namespace
 from pathlib import Path
@@ -624,6 +625,90 @@ def test_deep_scope_filter_does_not_hide_unsafe_finding_locations(
         complete(workbench_api, workbench_db, scan)
     manifest = json.loads((scan.scan_dir / "scan-manifest.json").read_text())
     assert manifest["scan"].get("status") != "completed"
+
+
+@pytest.mark.parametrize("stopped", [False, True])
+@pytest.mark.parametrize("scope", ["./subdir/", "./subdir/extract.py"])
+def test_deep_publication_preserves_original_scope_kinds_after_checkout_changes(
+    workbench_api, workbench_db, publication_scan, scope, stopped
+):
+    scan = publication_scan(paths=[scope, "background jobs"])
+    row = workbench_api["require_scan"](workbench_db, scan.scan_id)
+    file_paths = [scope] if scope.endswith(".py") else []
+    assert workbench_api["requested_scan_file_paths"](row) == file_paths
+    assert workbench_api["scan_contract"](row)["scope"]["filePaths"] == file_paths
+    descendant = copy.deepcopy(scan.findings[0])
+    descendant["identity"]["anchor"] = "descendant"
+    descendant["locations"] = [{"path": "subdir/extract.py/generated", "startLine": 1}]
+    for key in ("findingId", "occurrenceId", "fingerprints"):
+        descendant.pop(key, None)
+    findings = [*scan.findings, descendant]
+    (scan.scan_dir / "findings.json").write_text(json.dumps({"findings": findings}))
+    accepted = []
+    for kind in ("discovery", "dedup"):
+        result = add_worker(workbench_db, scan)
+        result.write_text(json.dumps(saved_draft(scan.scan_id, findings=findings, complete=True)))
+        with workbench_db:
+            workbench_db.execute(
+                "UPDATE deep_scan_workers SET kind = ?, merge_state = 'none' "
+                "WHERE result_manifest_path = ?",
+                (kind, str(result)),
+            )
+        accepted.append((result, result.read_bytes()))
+    target_path = Path(row["target_path"]) / scope
+    if file_paths:
+        target_path.unlink()
+        target_path.mkdir()
+    else:
+        shutil.rmtree(target_path)
+        target_path.write_text("new checkout file\n")
+    assert (
+        workbench_api["deep_scan"].deep_scan_result(workbench_db, scan.scan_id)["deepScan"][
+            "filePaths"
+        ]
+        == file_paths
+    )
+    if stopped:
+        workbench_api["saved_results"].fail_scan(
+            workbench_api["_WORKBENCH_DB_CONTEXT"],
+            workbench_db,
+            Namespace(
+                scan_id=scan.scan_id, claim_token=None, cost_json=None, message="interrupted"
+            ),
+        )
+    else:
+        assert complete(workbench_api, workbench_db, scan)["progress"]["status"] == "complete"
+    expected_paths = ["subdir/extract.py"] + ([] if file_paths else ["subdir/extract.py/generated"])
+    assert [
+        item["locations"][0]["path"]
+        for item in json.loads((scan.scan_dir / "findings.json").read_text())["findings"]
+    ] == expected_paths
+    for result, contents in accepted:
+        assert result.read_bytes() == contents
+    # Reading a sealed report keeps the original projection even after the checkout changes.
+    sealed = (scan.scan_dir / "findings.json").read_bytes()
+    workbench_api["finalize_scan"](scan.scan_dir)
+    assert (scan.scan_dir / "findings.json").read_bytes() == sealed
+
+
+def test_legacy_deep_scope_does_not_reclassify_a_changed_checkout(
+    workbench_api, workbench_db, publication_scan
+):
+    scan = publication_scan(paths=["subdir"])
+    row = workbench_api["require_scan"](workbench_db, scan.scan_id)
+    recipe = json.loads(row["recipe_json"])
+    recipe.pop("scopeFilePaths")
+    with workbench_db:
+        workbench_db.execute(
+            "UPDATE scans SET recipe_json = ? WHERE id = ?", (json.dumps(recipe), scan.scan_id)
+        )
+    row = workbench_api["require_scan"](workbench_db, scan.scan_id)
+    target = Path(row["target_path"]) / "subdir"
+    shutil.rmtree(target)
+    target.write_text("new checkout file\n")
+    assert complete(workbench_api, workbench_db, scan)["progress"]["status"] == "complete"
+    findings = json.loads((scan.scan_dir / "findings.json").read_text())["findings"]
+    assert len(findings) == 1
 
 
 @pytest.mark.parametrize(
