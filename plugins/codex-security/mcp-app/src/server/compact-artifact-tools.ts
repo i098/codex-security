@@ -288,7 +288,8 @@ export function registerCompactWorkerArtifactTools(
       title: "Get Codex Security Deep Reducer Inputs",
       description:
         "Read a byte-budgeted JSON fragment of the assigned findings and previous aggregate. " +
-        "Continue with nextCursor; concatenate json fragments before parsing. " +
+        "Continue with nextCursor until absent; concatenate json fragments before parsing. " +
+        "When using code-mode store, save fragments and cursor:nextCursor??null together in one state object; undefined cannot be stored. " +
         "Use findingRef source:<sourceFindingId> or previous:N to read full retained provenance.",
       inputSchema: deepReducerInputsInputSchema,
       annotations: readingAnnotations,
