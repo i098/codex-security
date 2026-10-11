@@ -113,13 +113,7 @@ function freshPager() {
     tools,
     (key: string) => values.get(key),
     (key: string, value: unknown) => {
-      const encoded = JSON.stringify(value);
-      assert.notEqual(
-        encoded,
-        undefined,
-        "code-mode store requires a serializable value",
-      );
-      const persisted = JSON.parse(encoded!);
+      const persisted = JSON.parse(JSON.stringify(value));
       assert.deepEqual(
         persisted,
         value,
