@@ -127,6 +127,13 @@ function nativeUsageRecord(
   };
 }
 
+function legacyUsageRecord(usage: Record<string, number>) {
+  return {
+    type: "event_msg",
+    payload: { type: "token_count", info: { total_token_usage: usage } },
+  };
+}
+
 test.each([
   [
     "prefers the spawned parent over legacy parent fields",
@@ -417,13 +424,7 @@ describe("live scan cost tracking", () => {
       path,
       jsonLines([
         nativeUsageRecord(scanThreadId, "response-1", usage),
-        {
-          type: "event_msg",
-          payload: {
-            type: "token_count",
-            info: { total_token_usage: ownedSdkUsage },
-          },
-        },
+        legacyUsageRecord(ownedSdkUsage),
       ]) + "\n",
     );
     const tracker = costTracker(home);
@@ -476,13 +477,7 @@ describe("live scan cost tracking", () => {
       jsonLines([
         compaction,
         { type: "compacted", payload: { message: "Compacted context." } },
-        {
-          type: "event_msg",
-          payload: {
-            type: "token_count",
-            info: { total_token_usage: original },
-          },
-        },
+        legacyUsageRecord(original),
       ]) + "\n",
     );
     expect((await tracker.refresh()).cost?.estimatedUsd).toBe(0.00041);
@@ -500,13 +495,7 @@ describe("live scan cost tracking", () => {
           { ...ownedSdkUsage, input_tokens: 30, output_tokens: 2 },
           final,
         ),
-        {
-          type: "event_msg",
-          payload: {
-            type: "token_count",
-            info: { total_token_usage: stale },
-          },
-        },
+        legacyUsageRecord(stale),
       ]) + "\n",
     );
     expect((await tracker.stop(stale)).usage).toMatchObject({
@@ -556,23 +545,13 @@ describe("live scan cost tracking", () => {
       input_tokens: 140,
       output_tokens: 13,
     };
-    await appendFile(
-      child,
-      jsonLines([
-        nativeUsageRecord(
-          childUuid7Thread,
-          "child-compact",
-          compact,
-          compactTotal,
-        ),
-        nativeUsageRecord(
-          childUuid7Thread,
-          "child-compact",
-          compact,
-          compactTotal,
-        ),
-      ]) + "\n",
+    const compaction = nativeUsageRecord(
+      childUuid7Thread,
+      "child-compact",
+      compact,
+      compactTotal,
     );
+    await appendFile(child, jsonLines([compaction, compaction]) + "\n");
     expect((await tracker.stop(inherited)).usage).toMatchObject({
       input_tokens: 1_140,
       output_tokens: 113,
