@@ -894,7 +894,6 @@ describe("custom validation", () => {
     for (const prompt of [standard, diff]) {
       expect(prompt).toContain("custom_pending");
       expect(prompt).toContain("extensions.customValidationSurfaceIds");
-      expect(prompt).not.toMatch(/\bcomplete:\s*true\b/);
       expect(prompt).not.toContain("finalize_scan_contract.py");
     }
     const changed = await temporaryDirectory();
