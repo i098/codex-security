@@ -697,7 +697,7 @@ def test_legacy_deep_scope_does_not_reclassify_a_changed_checkout(
     scan = publication_scan(paths=["subdir"])
     row = workbench_api["require_scan"](workbench_db, scan.scan_id)
     recipe = json.loads(row["recipe_json"])
-    recipe.pop("scopeFilePaths")
+    recipe.pop("scopeFilePaths", None)
     with workbench_db:
         workbench_db.execute(
             "UPDATE scans SET recipe_json = ? WHERE id = ?", (json.dumps(recipe), scan.scan_id)

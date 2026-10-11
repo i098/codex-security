@@ -1689,7 +1689,9 @@ def register_cli_scan(
     requested_target = recipe["target"]
     paths = requested_target["paths"]
     # Capture host-observed kinds once; resumes and publication use the saved recipe.
-    recipe["scopeFilePaths"] = [path for path in paths if (repository / path).is_file()]
+    recipe.pop("scopeFilePaths", None)
+    if file_paths := [path for path in paths if (repository / path).is_file()]:
+        recipe["scopeFilePaths"] = file_paths
     scope = paths[0] if len(paths) == 1 else "."
     diff_target = None
     if requested_target["kind"] in {"refs", "working_tree"}:
