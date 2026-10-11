@@ -211,8 +211,8 @@ with tempfile.TemporaryDirectory(prefix="deep-scan-completion-contract-") as roo
             "const deepScanCoordinators = globalThis.deepScanCancellationFixture.registry;",
           )
           .replace(
-            "async function runWorkbench(",
-            "const runWorkbench = (...args) => globalThis.deepScanCancellationFixture.workbench(...args);\nasync function unusedRunWorkbench(",
+            'import { PLUGIN_ROOT, runWorkbench, scanRoot } from "./src/workbench-client.js";',
+            'import { PLUGIN_ROOT, scanRoot } from "./src/workbench-client.js";\nconst runWorkbench = (...args) => globalThis.deepScanCancellationFixture.workbench(...args);',
           ),
         loader: "ts",
         resolveDir: applicationRoot,

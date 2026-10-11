@@ -140,8 +140,8 @@ for (const ordering of [
               "const deepScanCoordinators = globalThis.terminalRaceFixture.registry;",
             )
             .replace(
-              "async function runWorkbench(",
-              "const runWorkbench = (...args) => globalThis.terminalRaceFixture.workbench(...args);\nasync function unusedRunWorkbench(",
+              'import { PLUGIN_ROOT, runWorkbench, scanRoot } from "./src/workbench-client.js";',
+              'import { PLUGIN_ROOT, scanRoot } from "./src/workbench-client.js";\nconst runWorkbench = (...args) => globalThis.terminalRaceFixture.workbench(...args);',
             ),
           loader: "ts",
           resolveDir: applicationRoot,
