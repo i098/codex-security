@@ -12303,6 +12303,8 @@ async function incurErrorMessage(
       .split("\n")
       .find((line) => line.startsWith("message: "))
       ?.slice("message: ".length);
+    // Markdown renders the error as a Key/Value table.
+    message ??= /^\| message\s*\| (.*?)\s*\|$/mu.exec(output)?.[1];
     if (message === undefined) return output.trim();
     const parsed = parseJson(() => message!);
     if (typeof parsed === "string") message = parsed;

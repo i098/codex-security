@@ -1869,3 +1869,17 @@ test.each(["yaml", "toon", "json"])(
     expect(message).toContain(missing);
   },
 );
+
+test("a framework error with --format md prints only its message", async () => {
+  const root = await temporaryDirectory();
+  const missing = join(root, "scan.yaml");
+  const { stderr, runCli } = createCliTest(main);
+  expect(
+    await runCli(
+      ["info", "-c", missing, "--format", "md"],
+      dependencies({ currentDirectory: root }),
+    ),
+  ).toBe(2);
+  expect(stderr.text()).toContain(missing);
+  expect(stderr.text()).not.toContain("| Key");
+});
